@@ -1,5 +1,5 @@
 // Minimal content-type resolver to avoid extra deps.
-const map = new Map([
+const map = new Map<string, string>([
   ['.html', 'text/html; charset=utf-8'],
   ['.htm', 'text/html; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
@@ -20,15 +20,14 @@ const map = new Map([
   ['.ttf', 'font/ttf'],
 ]);
 
-export function contentTypeFor(filename) {
+export function contentTypeFor(filename: string): string {
   const idx = filename.lastIndexOf('.');
   if (idx === -1) return 'application/octet-stream';
   const ext = filename.slice(idx).toLowerCase();
   return map.get(ext) || 'application/octet-stream';
 }
 
-export function isHtml(filename) {
+export function isHtml(filename: string): boolean {
   const ct = contentTypeFor(filename);
   return ct.startsWith('text/html');
 }
-

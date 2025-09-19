@@ -1,5 +1,16 @@
+interface Env {
+  HOSTMAP: KVNamespace;
+  SITES_BUCKET: R2Bucket;
+}
+
+interface HostMapping {
+  tenant: string;
+  version: string;
+  root?: string;
+}
+
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const host = request.headers.get('host');
     if (!host) return new Response('Bad Request', { status: 400 });
@@ -11,7 +22,7 @@ export default {
     }
 
     // Lookup mapping from KV
-    const mapping = await env.HOSTMAP.get(`host:${host}`, { type: 'json' });
+    const mapping = await env.HOSTMAP.get(`host:${host}`, { type: 'json' }) as HostMapping | null;
     if (!mapping) return new Response('Not Found', { status: 404 });
 
     const { tenant, version, root = 'index.html' } = mapping;
@@ -41,10 +52,10 @@ export default {
   },
 };
 
-function contentType(filename) {
+function contentType(filename: string): string {
   // tiny mapping
   const ext = (filename.split('.').pop() || '').toLowerCase();
-  const map = {
+  const map: Record<string, string> = {
     html: 'text/html; charset=utf-8',
     htm: 'text/html; charset=utf-8',
     css: 'text/css; charset=utf-8',
@@ -64,7 +75,7 @@ function contentType(filename) {
   return map[ext] || 'application/octet-stream';
 }
 
-function respondWithObject(obj, reqPath, status = 200) {
+function respondWithObject(obj: R2ObjectBody, reqPath: string, status: number = 200): Response {
   const ct = contentType(reqPath);
   const isHtml = ct.startsWith('text/html');
   const headers = new Headers();

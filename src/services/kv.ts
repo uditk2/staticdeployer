@@ -2,7 +2,13 @@ import { config } from '../config/env.js';
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 
-function authHeaders() {
+export interface HostMapping {
+  tenant: string;
+  version: string;
+  root: string;
+}
+
+function authHeaders(): Record<string, string> {
   // Prefer API Token if provided
   if (config.cf.apiToken && config.cf.apiToken.trim() !== '') {
     return { 'Authorization': `Bearer ${config.cf.apiToken}` };
@@ -14,7 +20,7 @@ function authHeaders() {
   return {};
 }
 
-export async function putKV(key, value) {
+export async function putKV(key: string, value: string | object): Promise<void> {
   const url = `${API_BASE}/accounts/${config.cf.accountId}/storage/kv/namespaces/${config.cf.kvNamespaceId}/values/${encodeURIComponent(key)}`;
   const res = await fetch(url, {
     method: 'PUT',
@@ -36,12 +42,12 @@ export async function putKV(key, value) {
   }
 }
 
-export async function putHostMapping(host, mapping) {
+export async function putHostMapping(host: string, mapping: HostMapping): Promise<void> {
   // store as JSON string
   await putKV(`host:${host}`, mapping);
 }
 
-export async function getHostMapping(host) {
+export async function getHostMapping(host: string): Promise<HostMapping | null> {
   const url = `${API_BASE}/accounts/${config.cf.accountId}/storage/kv/namespaces/${config.cf.kvNamespaceId}/values/${encodeURIComponent('host:' + host)}`;
   const res = await fetch(url, {
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
@@ -49,9 +55,9 @@ export async function getHostMapping(host) {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`KV get failed ${res.status}`);
   try {
-    return await res.json();
+    return await res.json() as HostMapping;
   } catch {
     const text = await res.text();
-    return JSON.parse(text);
+    return JSON.parse(text) as HostMapping;
   }
 }

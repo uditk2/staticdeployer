@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import multer from 'multer';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -6,9 +6,9 @@ import path from 'node:path';
 import unzipper from 'unzipper';
 import { nanoid } from 'nanoid';
 
-import { assertControlPlaneEnv, config } from '../config/env.js';
+import { assertControlPlaneEnv } from '../config/env.js';
 import { uploadFile, objectExists } from '../services/r2.js';
-import { putHostMapping, getHostMapping } from '../services/kv.js';
+import { putHostMapping, getHostMapping, type HostMapping } from '../services/kv.js';
 import { walkDir } from '../utils/fs.js';
 
 assertControlPlaneEnv();
@@ -16,19 +16,34 @@ assertControlPlaneEnv();
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 * 200 } }); // 200MB
 
-app.get('/health', (_req, res) => {
+interface PublishRequestBody {
+  tenant?: string;
+  host?: string;
+  version?: string;
+  root?: string;
+}
+
+interface MappingRequestBody {
+  host?: string;
+  tenant?: string;
+  version?: string;
+  root?: string;
+}
+
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
 // POST /publish multipart form:
 // fields: tenant (string), version (optional), host (string), root (optional default index.html)
 // file: archive (zip of site root)
-app.post('/publish', upload.single('archive'), async (req, res) => {
+app.post('/publish', upload.single('archive'), async (req: Request, res: Response) => {
   try {
-    const tenant = String(req.body.tenant || '').trim();
-    const host = String(req.body.host || '').trim();
-    const version = String(req.body.version || '') || nanoid(8);
-    let rootFile = String(req.body.root || 'index.html');
+    const body = req.body as PublishRequestBody;
+    const tenant = String(body.tenant || '').trim();
+    const host = String(body.host || '').trim();
+    const version = String(body.version || '') || nanoid(8);
+    let rootFile = String(body.root || 'index.html');
     const userProvidedRoot = Object.prototype.hasOwnProperty.call(req.body, 'root');
 
     if (!tenant) return res.status(400).json({ error: 'tenant required' });
@@ -37,7 +52,7 @@ app.post('/publish', upload.single('archive'), async (req, res) => {
 
     // Extract to temp dir
     const dir = await fs.mkdtemp(path.join(tmpdir(), 'site-'));
-    await unzipper.Open.buffer(req.file.buffer).then(d => d.extract({ path: dir, concurrency: 8 }));
+    await unzipper.Open.buffer(req.file.buffer).then((d: any) => d.extract({ path: dir, concurrency: 8 }));
     // If the ZIP contains a single top-level folder, use it as the root
     let contentRoot = dir;
     try {
@@ -49,7 +64,7 @@ app.post('/publish', upload.single('archive'), async (req, res) => {
     } catch {}
 
     // Enumerate files to validate/resolve root file
-    const absFiles = [];
+    const absFiles: string[] = [];
     for await (const absPath of walkDir(contentRoot)) absFiles.push(absPath);
     const relFiles = absFiles.map(p => path.relative(contentRoot, p).split(path.sep).join('/'));
 
@@ -82,12 +97,12 @@ app.post('/publish', upload.single('archive'), async (req, res) => {
     }
 
     // Map host to {tenant, version, root}
-    const mapping = { tenant, version, root: rootFile };
+    const mapping: HostMapping = { tenant, version, root: rootFile };
     await putHostMapping(host, mapping);
 
     const url = `https://${host}`;
     res.json({ ok: true, uploaded, mapping, url });
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
@@ -96,13 +111,14 @@ app.post('/publish', upload.single('archive'), async (req, res) => {
 // POST /mapping: update host mapping without upload
 // body: { host, tenant, version, root? }
 app.use(express.json());
-app.post('/mapping', async (req, res) => {
+app.post('/mapping', async (req: Request, res: Response) => {
   try {
-    const { host, tenant, version, root = 'index.html' } = req.body || {};
+    const body = req.body as MappingRequestBody;
+    const { host, tenant, version, root = 'index.html' } = body || {};
     if (!host || !tenant || !version) return res.status(400).json({ error: 'host, tenant, version required' });
     await putHostMapping(String(host), { tenant: String(tenant), version: String(version), root: String(root) });
     res.json({ ok: true });
-  } catch (err) {
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -113,18 +129,18 @@ app.listen(PORT, () => {
 });
 
 // Lightweight debug helpers
-app.get('/mapping', async (req, res) => {
+app.get('/mapping', async (req: Request, res: Response) => {
   try {
     const host = String(req.query.host || '').trim();
     if (!host) return res.status(400).json({ error: 'host required' });
     const mapping = await getHostMapping(host);
     res.json({ host, mapping });
-  } catch (err) {
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/debug', async (req, res) => {
+app.get('/debug', async (req: Request, res: Response) => {
   try {
     const host = String(req.query.host || '').trim();
     if (!host) return res.status(400).json({ error: 'host required' });
@@ -134,7 +150,7 @@ app.get('/debug', async (req, res) => {
     const key = `sites/${tenant}/${version}/${root}`;
     const exists = await objectExists(key);
     res.json({ host, mapping, key, exists });
-  } catch (err) {
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });

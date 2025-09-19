@@ -3,14 +3,36 @@ import dotenv from 'dotenv';
 // Load .env if present
 dotenv.config();
 
-function required(name, value = process.env[name]) {
+function required(name: string, value: string | undefined = process.env[name]): string {
   if (!value || value.trim() === '') {
     throw new Error(`Missing required env var: ${name}`);
   }
   return value;
 }
 
-export const config = {
+export interface CloudflareConfig {
+  accountId: string | undefined;
+  apiToken: string | undefined;
+  apiKey: string | undefined;
+  email: string | undefined;
+  kvNamespaceId: string | undefined;
+}
+
+export interface R2Config {
+  accountId: string | undefined;
+  accessKeyId: string | undefined;
+  secretAccessKey: string | undefined;
+  bucket: string | undefined;
+  region: string;
+}
+
+export interface Config {
+  cf: CloudflareConfig;
+  r2: R2Config;
+  publicBaseDomain: string;
+}
+
+export const config: Config = {
   cf: {
     accountId: process.env.CF_ACCOUNT_ID,
     apiToken: process.env.CF_API_TOKEN,
@@ -29,7 +51,7 @@ export const config = {
   publicBaseDomain: process.env.PUBLIC_BASE_DOMAIN || 'example.com',
 };
 
-export function assertControlPlaneEnv() {
+export function assertControlPlaneEnv(): void {
   // Validate only what the control plane needs
   required('R2_ACCOUNT_ID');
   required('R2_ACCESS_KEY_ID');

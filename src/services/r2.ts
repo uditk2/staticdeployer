@@ -4,19 +4,38 @@ import path from 'node:path';
 import { config } from '../config/env.js';
 import { contentTypeFor } from '../utils/mime.js';
 
-function makeClient() {
+export interface UploadFileParams {
+  tenant: string;
+  version: string;
+  rootDir: string;
+  absPath: string;
+  keyPrefix?: string;
+}
+
+export interface UploadResult {
+  key: string;
+  etag: string | undefined;
+}
+
+function makeClient(): S3Client {
   const endpoint = `https://${config.r2.accountId}.r2.cloudflarestorage.com`;
   return new S3Client({
     region: config.r2.region,
     endpoint,
     credentials: {
-      accessKeyId: config.r2.accessKeyId,
-      secretAccessKey: config.r2.secretAccessKey,
+      accessKeyId: config.r2.accessKeyId!,
+      secretAccessKey: config.r2.secretAccessKey!,
     },
   });
 }
 
-export async function uploadFile({ tenant, version, rootDir, absPath, keyPrefix = 'sites' }) {
+export async function uploadFile({ 
+  tenant, 
+  version, 
+  rootDir, 
+  absPath, 
+  keyPrefix = 'sites' 
+}: UploadFileParams): Promise<UploadResult> {
   const client = makeClient();
   const rel = path.relative(rootDir, absPath).split(path.sep).join('/');
   const objectKey = `${keyPrefix}/${tenant}/${version}/${rel}`;
@@ -26,7 +45,7 @@ export async function uploadFile({ tenant, version, rootDir, absPath, keyPrefix 
 
   const stream = createReadStream(absPath);
   const res = await client.send(new PutObjectCommand({
-    Bucket: config.r2.bucket,
+    Bucket: config.r2.bucket!,
     Key: objectKey,
     Body: stream,
     ContentType,
@@ -35,12 +54,12 @@ export async function uploadFile({ tenant, version, rootDir, absPath, keyPrefix 
   return { key: objectKey, etag: res.ETag };
 }
 
-export async function objectExists(key) {
+export async function objectExists(key: string): Promise<boolean> {
   const client = makeClient();
   try {
-    await client.send(new HeadObjectCommand({ Bucket: config.r2.bucket, Key: key }));
+    await client.send(new HeadObjectCommand({ Bucket: config.r2.bucket!, Key: key }));
     return true;
-  } catch (err) {
+  } catch (err: any) {
     if (err?.$metadata?.httpStatusCode === 404) return false;
     // Some SDKs throw NoSuchKey without 404 code; treat as false
     if (err?.name === 'NotFound' || err?.Code === 'NoSuchKey') return false;
