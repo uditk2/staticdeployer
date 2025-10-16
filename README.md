@@ -1,62 +1,82 @@
-Static Deployer (Cloudflare)
+# Static Deployer (Cloudflare)
 
-Overview
-- Control-plane HTTP API to publish static sites to Cloudflare R2 and set host mappings in KV.
-- Cloudflare Worker serves content from R2 based on host -> {tenant, version} mapping.
+Static site control-plane that uploads build artifacts to Cloudflare R2, maps hostnames via Workers KV, and serves traffic through a Cloudflare Worker.
 
-Architecture
-- Upload: API receives a ZIP, extracts, uploads to `r2://<bucket>/sites/{tenant}/{version}/...`.
-- Mapping: API writes KV key `host:{host}` -> `{ tenant, version, root }`.
-- Serving: Worker looks up mapping, fetches `sites/{tenant}/{version}/{path}` from R2 and returns with proper cache headers.
+## Prerequisites
+- Node.js 18 or later.
+- Cloudflare account with:
+  - R2 bucket for site assets.
+  - Workers KV namespace for host → version mappings.
+  - API Token with **Workers KV Storage:Edit** and R2 permissions.
+- `wrangler` is provided via devDependencies; authenticate with `wrangler login`.
 
-Env Setup
-- Copy .env.example to .env and fill values for control-plane:
-  - `CF_ACCOUNT_ID`, `CF_API_TOKEN`, `CF_KV_NAMESPACE_ID`
-  - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
-  - Cloudflare API Token must include scope: Account -> Workers KV Storage:Edit (Edit is required for writes; Read is optional but recommended).
-  - Alternatively, you may use Global API Key auth by setting `CF_EMAIL` and `CF_API_KEY` (only if you omit `CF_API_TOKEN`).
+## Env Configuration
+1. Copy `.env.example` to `.env` and fill every field (see definitions below).
+2. The control-plane server requires the `CF_*` and `R2_*` values to be present before you run `npm run dev`.
+3. For Wrangler commands, comment out the `CF_ACCOUNT_ID` / `CF_API_TOKEN` lines first and authenticate with `wrangler login`. After login, restore them so the server can start.
+4. Regenerate `worker/wrangler.toml` (see **Toml Generation**) whenever you change any `WRANGLER_*`, `WORKER_NAME`, or route variables.
 
-Run API
-- `npm install`
-- `npm run dev` (defaults to `http://localhost:3000`)
 
-Curl Example
-- Publish
-  - `curl -F tenant=mytenant -F host=mytenant.yourdomain.com -F archive=@dist.zip http://localhost:3000/publish`
-- Update mapping
-  - `curl -H 'Content-Type: application/json' -d '{"host":"mytenant.yourdomain.com","tenant":"mytenant","version":"abc123"}' http://localhost:3000/mapping`
+### Environment variable reference
+- `CF_ACCOUNT_ID` / `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account that owns the KV namespace and R2 bucket.
+- `CF_API_TOKEN` / `CLOUDFLARE_API_TOKEN`: Cloudflare API token with Workers KV edit + R2 permissions.
+- `CF_KV_NAMESPACE_ID`: KV namespace ID used by the control plane.
+- `R2_ACCOUNT_ID`: Account ID hosting the R2 bucket.
+- `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`: R2 API credentials used by the control plane uploader.
+- `R2_BUCKET`: Name of the R2 bucket that stores the deployed site files.
+- `R2_REGION`: R2 region (typically `auto`).
+- `R2_BASE_URL`: Optional override for the R2 endpoint; not required for the current code path.
+- `PUBLIC_BASE_DOMAIN`: Default domain used when constructing preview URLs in logs.
+- `WRANGLER_ACCOUNT_ID`: Account injected into `worker/wrangler.toml`.
+- `WRANGLER_KV_NAMESPACE_ID`: KV namespace binding for the Worker.
+- `WRANGLER_R2_BUCKET_NAME`: R2 bucket binding name for the Worker.
+- `WRANGLER_ROUTE_PATTERN`: Route pattern placed into `worker/wrangler.toml`.
+- `WRANGLER_ZONE_NAME`: Zone name paired with the route pattern.
+- `WORKER_NAME`: Worker name written to `worker/wrangler.toml`.
+- `REDIRECT_DOMAIN`: Worker runtime env; redirects `www.<domain>` to the apex.
+- `ROUTE_PATTERN` / `ROUTE_ZONE_NAME`: Worker runtime hints that mirror the Wrangler route (informational, not read by the Worker).
 
-HTTP APIs
-- POST `/publish` (multipart/form-data)
-  - fields: `tenant`, `host`, optional: `version`, `root` (default `index.html`)
-  - file: `archive` (ZIP of site root)
-  - returns: `{ ok, uploaded, mapping, url }`
-- POST `/mapping` (application/json)
-  - body: `{ host, tenant, version, root? }`
+## Local Deployment
+- Install deps: `npm install`
+- Start the API: `npm run dev` (listens on `http://localhost:3000`)
+- Bundle your static site as a zip (you can zip the entire build folder; the server auto-detects a single top-level directory and uses it as the content root).
+- Publish a build:
+  ```bash
+  curl -F tenant=<tenant> \
+       -F host=<host.example.com> \
+       -F archive=@dist.zip \
+       http://localhost:3000/publish
+  ```
+- Update an existing mapping:
+  ```bash
+  curl -H "Content-Type: application/json" \
+       -d '{"host":"<host.example.com>","tenant":"<tenant>","version":"<build>"}' \
+       http://localhost:3000/mapping
+  ```
 
-Worker
-- Edit `worker/wrangler.toml` and set `account_id`, KV namespace and R2 bucket bindings.
-- Deploy: `npm run worker:deploy`
+## Request Params
+- `POST /publish` (`multipart/form-data`)
+  - Fields: `tenant`, `host`, optional `version`, optional `root` (defaults to `index.html`)
+  - File: `archive` (zip containing the site root)
+  - Response: `{ ok, uploaded, mapping, url }`
+- `POST /mapping` (`application/json`)
+  - Body: `{ host, tenant, version, root? }`
 
-Token quick-checks
-- Verify token can access your KV namespace (replace envs appropriately):
-  - `curl -H "Authorization: Bearer $CF_API_TOKEN" \ 
-     "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE_ID/keys?limit=1"`
-  - Expect HTTP 200. A 403 Authentication error means wrong token, missing scope, or account/namespace mismatch.
- - If using Global API Key, use headers instead:
-   - `curl -H "X-Auth-Email: $CF_EMAIL" -H "X-Auth-Key: $CF_API_KEY" \ 
-      "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE_ID/keys?limit=1"`
+## Worker Deployment
+- Ensure `CF_ACCOUNT_ID` / `CF_API_TOKEN` are commented out in `.env`, then run `wrangler login` once to authenticate.
+- Regenerate `worker/wrangler.toml` (see below).
+- Preview locally: `npm run worker:dev`
+- Deploy to Cloudflare: `npm run worker:deploy`
+- After deployment, point DNS or Cloudflare routes to the Worker hostname/pattern.
 
-Notes
-- R2 access uses AWS S3 SDK v3 against R2 endpoint (S3-compatible).
-- Cache policy: short for HTML, long immutable for assets.
+## Toml Generation
+`worker/wrangler.toml` is generated from `worker/wrangler.toml.template` via `worker/generate-config.js`.
 
-E2E Test Script
-- Runs an end-to-end flow: create sample site, ZIP, call `/publish`, then verify content via HTTP.
-- Configure env:
-  - `API_BASE` (default `http://localhost:3000`)
-  - `PUBLIC_BASE_DOMAIN` (used to craft default host if `TEST_HOST` not set)
-  - `TEST_TENANT`, `TEST_HOST`, `TEST_VERSION` (optional overrides)
-  - `VERIFY_URL` (optional; defaults to `https://<TEST_HOST>/`)
-- Execute: `npm run test:flow`
-- Note: Verification requires your DNS/route to point the host to the Worker (or use a workers.dev route and set `VERIFY_URL` accordingly).
+```bash
+npm run worker:config
+```
+
+The script reads `.env`, loads every variable into `process.env`, and substitutes any `${VAR_NAME}` placeholders it finds in the template. Keep placeholders limited to the vars you actually set, and regenerate whenever those values change.
+
+## Known Issues
+- Wrangler commands ignore `wrangler login` when `CF_API_TOKEN` is present; comment those lines before running Wrangler, then re-enable them for the server.

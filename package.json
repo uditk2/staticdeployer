@@ -9,8 +9,9 @@
   },
   "scripts": {
     "dev": "node src/server/index.js",
-    "worker:dev": "wrangler dev worker/src/index.js",
-    "worker:deploy": "wrangler deploy worker/src/index.js",
+    "worker:config": "node worker/generate-config.js",
+    "worker:dev": "npm run worker:config && wrangler dev worker/src/index.js",
+    "worker:deploy": "npm run worker:config && wrangler deploy worker/src/index.js",
     "test:flow": "node scripts/test-flow.js"
   },
   "dependencies": {

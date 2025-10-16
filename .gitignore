@@ -47,6 +47,7 @@ Thumbs.db
 # Cloudflare Wrangler
 .wrangler/
 .dev.vars
+worker/wrangler.toml
 
 # Package manager caches
 .npm-cache/

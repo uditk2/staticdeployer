@@ -4,9 +4,12 @@ export default {
     const host = request.headers.get('host');
     if (!host) return new Response('Bad Request', { status: 400 });
 
-    // Redirect www.venturepulse.app -> venturepulse.app (preserve path and query)
-    if (host.toLowerCase() === 'www.venturepulse.app') {
-      const location = `https://venturepulse.app${url.pathname}${url.search}`;
+    // Get redirect domain from environment variable or default
+    const redirectDomain = env.REDIRECT_DOMAIN;
+
+    // Redirect www subdomain to apex domain (preserve path and query)
+    if (host.toLowerCase() === `www.${redirectDomain}`) {
+      const location = `https://${redirectDomain}${url.pathname}${url.search}`;
       return Response.redirect(location, 301);
     }
 

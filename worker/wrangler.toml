@@ -1,18 +1,20 @@
-name = "staticdeployer-edge"
+name = "landingforge-site-deployer"
 main = "src/index.js"
 compatibility_date = "2024-09-01"
 
-# Fill these in before deploy
+
 account_id = "4b414c2bbcf02a3f832f1727420bcef3"
 
 routes = [
-  { pattern = "*.venturepulse.app/*", zone_name = "venturepulse.app" }
+  { pattern = "*.landingforge.app/*", zone_name = "landingforge.app" }
 ]
 
 [[kv_namespaces]]
 binding = "HOSTMAP"
-id = "6c14971b36b542918cf5e260717119ec"
+id = "4971568854964c02877cfd17ea356680"
 
 [[r2_buckets]]
 binding = "SITES_BUCKET"
-bucket_name = "venturepulse"
+bucket_name = "landingforge"
+
+

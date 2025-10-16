@@ -1,0 +1,20 @@
+name = "${WORKER_NAME}"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+
+account_id = "${WRANGLER_ACCOUNT_ID}"
+
+routes = [
+  { pattern = "${ROUTE_PATTERN}", zone_name = "${ROUTE_ZONE_NAME}" }
+]
+
+[[kv_namespaces]]
+binding = "HOSTMAP"
+id = "${WRANGLER_KV_NAMESPACE_ID}"
+
+[[r2_buckets]]
+binding = "SITES_BUCKET"
+bucket_name = "${WRANGLER_R2_BUCKET_NAME}"
+
+
