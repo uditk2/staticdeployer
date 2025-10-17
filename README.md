@@ -53,6 +53,12 @@ Static site control-plane that uploads build artifacts to Cloudflare R2, maps ho
        -d '{"host":"<host.example.com>","tenant":"<tenant>","version":"<build>"}' \
        http://localhost:3000/mapping
   ```
+- Unpublish a site (removes host mapping, keeps R2 files):
+  ```bash
+  curl -X POST -H "Content-Type: application/json" \
+       -d '{"host":"<host.example.com>"}' \
+       http://localhost:3000/unpublish
+  ```
 
 ## Request Params
 - `POST /publish` (`multipart/form-data`)
@@ -61,6 +67,9 @@ Static site control-plane that uploads build artifacts to Cloudflare R2, maps ho
   - Response: `{ ok, uploaded, mapping, url }`
 - `POST /mapping` (`application/json`)
   - Body: `{ host, tenant, version, root? }`
+- `POST /unpublish` (`application/json`)
+  - Body: `{ host }`
+  - Response: `{ ok, host, mapping }` (mapping is null if host wasn't mapped)
 
 ## Worker Deployment
 - Ensure `CF_ACCOUNT_ID` / `CF_API_TOKEN` are commented out in `.env`, then run `wrangler login` once to authenticate.

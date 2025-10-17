@@ -55,3 +55,21 @@ export async function getHostMapping(host) {
     return JSON.parse(text);
   }
 }
+
+export async function deleteKV(key) {
+  const url = `${API_BASE}/accounts/${config.cf.accountId}/storage/kv/namespaces/${config.cf.kvNamespaceId}/values/${encodeURIComponent(key)}`;
+  console.log(`[KV] Deleting key: ${key}`);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`KV delete failed (${res.status}): ${text}`);
+  }
+  console.log(`[KV] Delete successful (status: ${res.status})`);
+}
+
+export async function deleteHostMapping(host) {
+  await deleteKV(`host:${host}`);
+}

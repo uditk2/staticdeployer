@@ -8,7 +8,7 @@ import { nanoid } from 'nanoid';
 
 import { assertControlPlaneEnv, config } from '../config/env.js';
 import { uploadFile, objectExists } from '../services/r2.js';
-import { putHostMapping, getHostMapping } from '../services/kv.js';
+import { putHostMapping, getHostMapping, deleteHostMapping } from '../services/kv.js';
 import { walkDir } from '../utils/fs.js';
 
 assertControlPlaneEnv();
@@ -102,6 +102,20 @@ app.post('/mapping', async (req, res) => {
     if (!host || !tenant || !version) return res.status(400).json({ error: 'host, tenant, version required' });
     await putHostMapping(String(host), { tenant: String(tenant), version: String(version), root: String(root) });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /unpublish: remove host mapping
+// body: { host }
+app.post('/unpublish', async (req, res) => {
+  try {
+    const { host } = req.body || {};
+    if (!host) return res.status(400).json({ error: 'host required' });
+    const mapping = await getHostMapping(String(host));
+    await deleteHostMapping(String(host));
+    res.json({ ok: true, host, mapping });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
